@@ -37,6 +37,7 @@ def image_diff():
     img1_base64 = data.get('image1')
     img2_base64 = data.get('image2')
     threshold = data.get('threshold', 0)  # 默认阈值为 0
+    transparency = data.get('transparency', 0.5)  # 默认透明度为 0.5
 
     if not img1_base64 or not img2_base64:
         return jsonify({'error': 'Missing image data'}), 400
@@ -52,13 +53,31 @@ def image_diff():
         # 计算图像差分
         diff = cv2.absdiff(img1, img2)
 
-        # 应用阈值
-        _, thresholded_diff = cv2.threshold(diff, threshold, 255, cv2.THRESH_BINARY)
+        # 转换差分图像为灰度图
+        diff_gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
-        # 将差分图像编码为 base64
-        diff_base64 = encode_image(thresholded_diff)
+        # 应用阈值，得到二值化的差分图像
+        _, thresholded_diff = cv2.threshold(diff_gray, threshold, 255, cv2.THRESH_BINARY)
 
-        return jsonify({'diff_image': diff_base64})
+        # 将二值化的差分图像转换为三通道
+        thresholded_diff_color = cv2.cvtColor(thresholded_diff, cv2.COLOR_GRAY2BGR)
+
+        # 创建一个与 img2 相同的 overlay 图像
+        overlay = img2.copy()
+
+        # 定义差分区域的颜色，例如红色
+        diff_color = [0, 0, 255]  # BGR 格式的红色
+
+        # 在 overlay 上，将差分区域的像素设置为指定颜色
+        overlay[thresholded_diff > 0] = diff_color
+
+        # 使用透明度参数，将 overlay 图像叠加到 img2 上
+        blended = cv2.addWeighted(overlay, transparency, img2, 1 - transparency, 0)
+
+        # 将叠加后的图像编码为 base64
+        blended_base64 = encode_image(blended)
+
+        return jsonify({'diff_image': blended_base64})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
